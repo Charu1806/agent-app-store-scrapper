@@ -1,0 +1,704 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>App Store Competitive Dashboard</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<style>
+  :root {
+    --bg: #0f1117;
+    --surface: #1a1d2e;
+    --card: #22253a;
+    --border: #2e3350;
+    --text: #e2e8f0;
+    --muted: #8892b0;
+    --green: #4ade80;
+    --red: #f87171;
+    --yellow: #fbbf24;
+    --blue: #60a5fa;
+    --purple: #a78bfa;
+    --accent: #818cf8;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { background: var(--bg); color: var(--text); font-family: 'Segoe UI', system-ui, sans-serif; min-height: 100vh; }
+
+  header { background: var(--surface); border-bottom: 1px solid var(--border); padding: 16px 24px; display: flex; align-items: center; justify-content: space-between; }
+  header h1 { font-size: 1.2rem; font-weight: 700; color: var(--accent); }
+  #last-updated { font-size: 0.75rem; color: var(--muted); }
+
+  nav { background: var(--surface); border-bottom: 1px solid var(--border); padding: 0 24px; display: flex; gap: 4px; overflow-x: auto; }
+  nav button { background: none; border: none; color: var(--muted); padding: 14px 18px; cursor: pointer; font-size: 0.875rem; font-weight: 500; border-bottom: 2px solid transparent; transition: all .2s; white-space: nowrap; }
+  nav button:hover { color: var(--text); }
+  nav button.active { color: var(--accent); border-bottom-color: var(--accent); }
+
+  .tab-content { display: none; padding: 24px; max-width: 1400px; margin: 0 auto; }
+  .tab-content.active { display: block; }
+
+  .grid { display: grid; gap: 20px; }
+  .grid-2 { grid-template-columns: repeat(auto-fit, minmax(380px, 1fr)); }
+  .grid-3 { grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); }
+  .grid-4 { grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); }
+
+  .card { background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 20px; }
+  .card h3 { font-size: 0.875rem; color: var(--muted); font-weight: 500; margin-bottom: 12px; text-transform: uppercase; letter-spacing: .05em; }
+  .card .big-num { font-size: 2.5rem; font-weight: 700; color: var(--text); }
+
+  .chart-wrap { position: relative; height: 280px; }
+  .chart-wrap-sm { position: relative; height: 200px; }
+
+  /* Sentiment bars */
+  .sent-bar { display: flex; height: 10px; border-radius: 999px; overflow: hidden; margin: 8px 0; }
+  .sent-bar-pos { background: var(--green); }
+  .sent-bar-neg { background: var(--red); }
+  .sent-bar-neu { background: var(--yellow); }
+
+  .sent-legend { display: flex; gap: 16px; font-size: 0.8rem; color: var(--muted); }
+  .dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; margin-right: 4px; }
+  .dot-green { background: var(--green); }
+  .dot-red { background: var(--red); }
+  .dot-yellow { background: var(--yellow); }
+
+  /* Alert chips */
+  .alert { background: #3b1e1e; border: 1px solid #7f1d1d; border-radius: 8px; padding: 10px 14px; font-size: 0.8rem; color: var(--red); margin-bottom: 8px; }
+  .info-chip { background: #1e273b; border: 1px solid var(--border); border-radius: 6px; padding: 4px 10px; font-size: 0.75rem; color: var(--blue); display: inline-block; margin: 3px; }
+
+  /* Competitive table */
+  table { width: 100%; border-collapse: collapse; font-size: 0.875rem; }
+  th { text-align: left; padding: 10px 14px; color: var(--muted); font-weight: 500; border-bottom: 1px solid var(--border); font-size: 0.75rem; text-transform: uppercase; }
+  td { padding: 12px 14px; border-bottom: 1px solid var(--border); }
+  tr:last-child td { border-bottom: none; }
+  tr:hover td { background: rgba(255,255,255,.03); }
+
+  .score-badge { display: inline-block; padding: 2px 10px; border-radius: 999px; font-weight: 700; font-size: 0.875rem; }
+  .score-high { background: rgba(74,222,128,.15); color: var(--green); }
+  .score-mid  { background: rgba(251,191,36,.15); color: var(--yellow); }
+  .score-low  { background: rgba(248,113,113,.15); color: var(--red); }
+
+  .trend-up   { color: var(--green); }
+  .trend-down { color: var(--red); }
+  .trend-flat { color: var(--yellow); }
+
+  /* Feature heatmap */
+  .feature-row { display: flex; align-items: center; gap: 10px; margin-bottom: 8px; }
+  .feature-name { min-width: 130px; font-size: 0.8rem; color: var(--muted); }
+  .feature-bar-wrap { flex: 1; height: 8px; background: var(--border); border-radius: 999px; overflow: hidden; }
+  .feature-bar-fill { height: 100%; border-radius: 999px; }
+  .feature-count { font-size: 0.75rem; color: var(--muted); min-width: 30px; text-align: right; }
+
+  /* Download button */
+  .btn { display: inline-flex; align-items: center; gap: 8px; padding: 10px 18px; border-radius: 8px; font-size: 0.875rem; font-weight: 500; cursor: pointer; border: none; transition: all .2s; }
+  .btn-primary { background: var(--accent); color: #fff; }
+  .btn-primary:hover { opacity: .85; }
+  .btn-outline { background: none; border: 1px solid var(--border); color: var(--muted); }
+  .btn-outline:hover { border-color: var(--accent); color: var(--accent); }
+
+  .loading { text-align: center; padding: 60px; color: var(--muted); }
+  .section-title { font-size: 1.1rem; font-weight: 600; color: var(--text); margin-bottom: 16px; }
+  .badge-trend { font-size: 0.7rem; padding: 2px 8px; border-radius: 999px; font-weight: 600; }
+
+  /* Radar chart container */
+  .radar-wrap { position: relative; height: 320px; max-width: 400px; margin: 0 auto; }
+
+  /* Insight box */
+  .insight-box { background: rgba(99,102,241,.1); border: 1px solid rgba(99,102,241,.3); border-radius: 10px; padding: 16px; font-size: 0.85rem; line-height: 1.6; color: var(--text); white-space: pre-wrap; }
+
+  /* Raw data filter */
+  .filter-row { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; margin-bottom: 16px; }
+  select, input[type=date] { background: var(--card); border: 1px solid var(--border); color: var(--text); padding: 8px 12px; border-radius: 8px; font-size: 0.875rem; cursor: pointer; }
+
+  @media (max-width: 600px) {
+    .tab-content { padding: 16px; }
+    nav button { padding: 12px 12px; font-size: 0.8rem; }
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>📊 App Store Competitive Dashboard</h1>
+  <span id="last-updated">Loading...</span>
+</header>
+
+<nav>
+  <button class="active" onclick="showTab('sentiment')">😊 Sentiment</button>
+  <button onclick="showTab('features')">🔍 Features</button>
+  <button onclick="showTab('trends')">📈 Trends</button>
+  <button onclick="showTab('competitive')">🏆 Competitive</button>
+  <button onclick="showTab('raw')">📁 Raw Data</button>
+</nav>
+
+<!-- TAB 1: SENTIMENT -->
+<div id="tab-sentiment" class="tab-content active">
+  <div class="section-title">Sentiment Analysis</div>
+  <div id="sentiment-gauges" class="grid grid-3" style="margin-bottom:20px"></div>
+  <div class="grid grid-2">
+    <div class="card">
+      <h3>Sentiment Trend (30 Days)</h3>
+      <div class="chart-wrap"><canvas id="chart-sentiment-trend"></canvas></div>
+    </div>
+    <div class="card">
+      <h3>Current Distribution</h3>
+      <div class="chart-wrap"><canvas id="chart-sentiment-dist"></canvas></div>
+    </div>
+  </div>
+  <div style="margin-top:20px">
+    <div id="sentiment-alerts"></div>
+  </div>
+  <div class="grid grid-2" style="margin-top:20px">
+    <div class="card" id="card-liked">
+      <h3>What Users Love</h3>
+      <div id="features-liked"></div>
+    </div>
+    <div class="card" id="card-pain">
+      <h3>Pain Points</h3>
+      <div id="pain-points"></div>
+    </div>
+  </div>
+</div>
+
+<!-- TAB 2: FEATURES -->
+<div id="tab-features" class="tab-content">
+  <div class="section-title">Feature Analysis</div>
+  <div class="grid grid-2">
+    <div class="card">
+      <h3>Top Mentioned Features</h3>
+      <div id="feature-bars"></div>
+    </div>
+    <div class="card">
+      <h3>Feature Sentiment (Positive vs Negative)</h3>
+      <div class="chart-wrap"><canvas id="chart-feature-sentiment"></canvas></div>
+    </div>
+  </div>
+  <div class="grid grid-2" style="margin-top:20px">
+    <div class="card">
+      <h3>Feature Count by App</h3>
+      <div class="chart-wrap"><canvas id="chart-feature-count"></canvas></div>
+    </div>
+    <div class="card">
+      <h3>Top Requested (Missing Features)</h3>
+      <div id="top-requested"></div>
+    </div>
+  </div>
+</div>
+
+<!-- TAB 3: TRENDS -->
+<div id="tab-trends" class="tab-content">
+  <div class="section-title">Trend Analysis</div>
+  <div class="card" style="margin-bottom:20px">
+    <h3>Sentiment Over Time — All Apps</h3>
+    <div class="chart-wrap" style="height:320px"><canvas id="chart-all-trends"></canvas></div>
+  </div>
+  <div class="grid grid-2">
+    <div class="card">
+      <h3>Rating Trends</h3>
+      <div class="chart-wrap"><canvas id="chart-rating-trend"></canvas></div>
+    </div>
+    <div class="card">
+      <h3>Review Volume</h3>
+      <div class="chart-wrap"><canvas id="chart-review-volume"></canvas></div>
+    </div>
+  </div>
+  <div class="card" style="margin-top:20px">
+    <h3>AI Trend Insights</h3>
+    <div id="trend-insight" class="insight-box">Loading insights...</div>
+  </div>
+</div>
+
+<!-- TAB 4: COMPETITIVE -->
+<div id="tab-competitive" class="tab-content">
+  <div class="section-title">Competitive Dashboard</div>
+  <div class="grid grid-2" style="margin-bottom:20px">
+    <div class="card">
+      <h3>Competitive Rankings</h3>
+      <table id="competitive-table">
+        <thead><tr><th>App</th><th>Score</th><th>Sentiment</th><th>Avg Rating</th><th>Trend</th></tr></thead>
+        <tbody></tbody>
+      </table>
+    </div>
+    <div class="card">
+      <h3>Radar: Competitive Strengths</h3>
+      <div class="radar-wrap"><canvas id="chart-radar"></canvas></div>
+    </div>
+  </div>
+  <div class="card">
+    <h3>Recommendations</h3>
+    <div id="recommendations"></div>
+  </div>
+</div>
+
+<!-- TAB 5: RAW DATA -->
+<div id="tab-raw" class="tab-content">
+  <div class="section-title">Raw Data Explorer</div>
+  <div class="filter-row">
+    <select id="filter-app"><option value="">All Apps</option></select>
+    <input type="date" id="filter-from" title="From date">
+    <input type="date" id="filter-to" title="To date">
+    <button class="btn btn-primary" onclick="applyFilter()">Filter</button>
+    <a href="/api/export/csv" download="app_store_data.csv">
+      <button class="btn btn-outline">⬇ Download CSV</button>
+    </a>
+  </div>
+  <div class="card">
+    <table id="raw-table">
+      <thead><tr><th>App</th><th>Date</th><th>Positive %</th><th>Negative %</th><th>Neutral %</th><th>Avg Rating</th><th>Reviews</th></tr></thead>
+      <tbody id="raw-body"></tbody>
+    </table>
+  </div>
+</div>
+
+<script>
+const COLORS = ['#60a5fa','#4ade80','#f87171','#fbbf24','#a78bfa','#34d399','#fb923c'];
+let _state = { latest: {}, historical: {}, apps: [] };
+
+// --- Tab navigation ---
+function showTab(id) {
+  document.querySelectorAll('.tab-content').forEach(el => el.classList.remove('active'));
+  document.querySelectorAll('nav button').forEach(el => el.classList.remove('active'));
+  document.getElementById('tab-' + id).classList.add('active');
+  event.target.classList.add('active');
+}
+
+// --- Chart helpers ---
+const chartInstances = {};
+function makeChart(id, config) {
+  if (chartInstances[id]) chartInstances[id].destroy();
+  const ctx = document.getElementById(id);
+  if (!ctx) return;
+  chartInstances[id] = new Chart(ctx, config);
+  return chartInstances[id];
+}
+
+const baseOpts = {
+  responsive: true, maintainAspectRatio: false,
+  plugins: { legend: { labels: { color: '#8892b0', font: { size: 11 } } } },
+  scales: {
+    x: { ticks: { color: '#8892b0' }, grid: { color: '#2e3350' } },
+    y: { ticks: { color: '#8892b0' }, grid: { color: '#2e3350' } }
+  }
+};
+
+// --- Data loading ---
+async function loadAll() {
+  const [apps, latest, historical] = await Promise.all([
+    fetch('/api/apps').then(r => r.json()).catch(() => []),
+    fetch('/api/latest').then(r => r.json()).catch(() => ({})),
+    fetch('/api/historical').then(r => r.json()).catch(() => ({})),
+  ]);
+  _state = { apps, latest, historical };
+  document.getElementById('last-updated').textContent = 'Updated: ' + new Date().toLocaleString();
+  populateAll();
+}
+
+function populateAll() {
+  renderSentimentTab();
+  renderFeaturesTab();
+  renderTrendsTab();
+  renderCompetitiveTab();
+  renderRawTab();
+}
+
+// --- TAB 1: Sentiment ---
+function renderSentimentTab() {
+  const { latest, apps } = _state;
+  const container = document.getElementById('sentiment-gauges');
+  container.innerHTML = '';
+
+  const allPos = [], allNeg = [], allNeu = [], labels = [];
+
+  for (const [appName, data] of Object.entries(latest)) {
+    const sent = data.sentiment || {};
+    const pos = sent.positive || 0, neg = sent.negative || 0, neu = sent.neutral || 0;
+    const total = data.review_count || 0;
+    // Convert percentages to absolute review counts for the bar chart
+    allPos.push(Math.round(total * pos / 100));
+    allNeg.push(Math.round(total * neg / 100));
+    allNeu.push(Math.round(total * neu / 100));
+    labels.push(appName);
+
+    const card = document.createElement('div');
+    card.className = 'card';
+    card.innerHTML = `
+      <h3>${appName}</h3>
+      <div class="sent-bar">
+        <div class="sent-bar-pos" style="width:${pos}%"></div>
+        <div class="sent-bar-neg" style="width:${neg}%"></div>
+        <div class="sent-bar-neu" style="width:${neu}%"></div>
+      </div>
+      <div class="sent-legend">
+        <span><span class="dot dot-green"></span>${pos.toFixed(0)}% (${Math.round(total*pos/100)} reviews)</span>
+        <span><span class="dot dot-red"></span>${neg.toFixed(0)}% (${Math.round(total*neg/100)})</span>
+        <span><span class="dot dot-yellow"></span>${neu.toFixed(0)}% neutral</span>
+      </div>
+      <div style="margin-top:8px;font-size:.75rem;color:var(--muted)">
+        ⭐ ${data.average_rating ? data.average_rating.toFixed(1) : '—'} &nbsp;|&nbsp; ${total} reviews
+      </div>`;
+    container.appendChild(card);
+  }
+
+  // Grouped bar — apps on X-axis, review counts on Y-axis (positive vs negative vs neutral)
+  makeChart('chart-sentiment-dist', {
+    type: 'bar',
+    data: {
+      labels,
+      datasets: [
+        { label: 'Positive reviews', data: allPos, backgroundColor: '#4ade8099', borderColor: '#4ade80', borderWidth: 1 },
+        { label: 'Negative reviews', data: allNeg, backgroundColor: '#f8717199', borderColor: '#f87171', borderWidth: 1 },
+        { label: 'Neutral reviews',  data: allNeu, backgroundColor: '#fbbf2499', borderColor: '#fbbf24', borderWidth: 1 },
+      ]
+    },
+    options: {
+      ...baseOpts,
+      scales: {
+        x: { ticks: { color: '#8892b0' }, grid: { color: '#2e3350' } },
+        y: { ticks: { color: '#8892b0', callback: v => v + ' reviews' }, grid: { color: '#2e3350' } }
+      }
+    }
+  });
+
+  // Trend lines per app (positive %)
+  renderSentimentTrendChart();
+
+  // Likes / pain points from latest
+  const likedEl = document.getElementById('features-liked');
+  const painEl = document.getElementById('pain-points');
+  likedEl.innerHTML = ''; painEl.innerHTML = '';
+  for (const [appName, data] of Object.entries(latest)) {
+    if (data.features_liked?.length) {
+      likedEl.innerHTML += `<div style="font-size:.8rem;color:var(--muted);margin-bottom:4px;font-weight:600">${appName}</div>`;
+      data.features_liked.slice(0,4).forEach(f => { likedEl.innerHTML += `<div style="font-size:.8rem;padding:3px 0;color:var(--green)">✓ ${f}</div>`; });
+    }
+    if (data.pain_points?.length) {
+      painEl.innerHTML += `<div style="font-size:.8rem;color:var(--muted);margin-bottom:4px;font-weight:600">${appName}</div>`;
+      data.pain_points.slice(0,4).forEach(f => { painEl.innerHTML += `<div style="font-size:.8rem;padding:3px 0;color:var(--red)">✗ ${f}</div>`; });
+    }
+  }
+}
+
+function renderSentimentTrendChart() {
+  const { historical } = _state;
+  const datasets = [];
+  let allDates = new Set();
+
+  Object.entries(historical).forEach(([appName, dateMap]) => {
+    Object.keys(dateMap).forEach(d => allDates.add(d));
+  });
+
+  const dates = Array.from(allDates).sort();
+  const singleDay = dates.length <= 1;
+
+  // Strip year prefix (YYYY-) from "YYYY-MM-DD HH:MM" → "MM-DD HH:MM"
+  const fmtLabel = d => d.slice(5);
+  // When only 1 run, pad with a phantom so a point renders (not an invisible dot)
+  const chartLabels = singleDay && dates.length === 1
+    ? [fmtLabel(dates[0]), 'Next run']
+    : dates.map(fmtLabel);
+
+  Object.entries(historical).forEach(([appName, dateMap], i) => {
+    let posData = dates.map(d => dateMap[d]?.sentiment?.positive ?? null);
+    if (singleDay && dates.length === 1) posData = [posData[0], null];
+    datasets.push({
+      label: appName,
+      data: posData, borderColor: COLORS[i % COLORS.length],
+      backgroundColor: COLORS[i % COLORS.length] + '22',
+      tension: 0.3, pointRadius: 5, pointHoverRadius: 7, spanGaps: false
+    });
+  });
+
+  const chartEl = document.getElementById('chart-sentiment-trend').parentElement;
+  const note = chartEl.querySelector('.single-day-note');
+  if (singleDay) {
+    if (!note) {
+      const n = document.createElement('div');
+      n.className = 'single-day-note';
+      n.style.cssText = 'font-size:.75rem;color:#8892b0;text-align:center;margin-top:6px';
+      n.textContent = '📅 Trend lines appear after multiple days of data are collected.';
+      chartEl.appendChild(n);
+    }
+  } else if (note) note.remove();
+
+  makeChart('chart-sentiment-trend', {
+    type: 'line',
+    data: { labels: chartLabels, datasets },
+    options: {
+      ...baseOpts,
+      plugins: { ...baseOpts.plugins, legend: { labels: { color: '#8892b0', font: { size: 11 } } } },
+      scales: {
+        x: { ticks: { color: '#8892b0' }, grid: { color: '#2e3350' } },
+        y: { min: 0, max: 100, ticks: { color: '#8892b0', callback: v => v + '%' }, grid: { color: '#2e3350' } }
+      }
+    }
+  });
+}
+
+// --- TAB 2: Features ---
+function renderFeaturesTab() {
+  const { latest } = _state;
+  const barsEl = document.getElementById('feature-bars');
+  barsEl.innerHTML = '';
+
+  // Aggregate features across all apps
+  const featureMap = {};
+  for (const [appName, data] of Object.entries(latest)) {
+    const feats = data.features || {};
+    const arr = Array.isArray(feats) ? feats : Object.values(feats);
+    arr.forEach(f => {
+      if (!featureMap[f.name]) featureMap[f.name] = { count: 0, pos: 0, neg: 0 };
+      featureMap[f.name].count += f.count || 0;
+      featureMap[f.name].pos += f.positive_mentions || 0;
+      featureMap[f.name].neg += f.negative_mentions || 0;
+    });
+  }
+
+  const sorted = Object.entries(featureMap).sort((a, b) => b[1].count - a[1].count).slice(0, 15);
+  const maxCount = sorted[0]?.[1].count || 1;
+
+  sorted.forEach(([name, f]) => {
+    const ratio = f.count / maxCount;
+    const sentiment = f.pos + f.neg > 0 ? f.pos / (f.pos + f.neg) : 0.5;
+    const color = sentiment > 0.6 ? '#4ade80' : sentiment < 0.4 ? '#f87171' : '#fbbf24';
+    barsEl.innerHTML += `
+      <div class="feature-row">
+        <span class="feature-name">${name}</span>
+        <div class="feature-bar-wrap">
+          <div class="feature-bar-fill" style="width:${ratio*100}%;background:${color}"></div>
+        </div>
+        <span class="feature-count">${f.count}</span>
+      </div>`;
+  });
+
+  // Feature sentiment chart (grouped)
+  const featLabels = sorted.slice(0, 10).map(([n]) => n);
+  const posData = sorted.slice(0, 10).map(([, f]) => f.pos);
+  const negData = sorted.slice(0, 10).map(([, f]) => f.neg);
+
+  makeChart('chart-feature-sentiment', {
+    type: 'bar',
+    data: {
+      labels: featLabels,
+      datasets: [
+        { label: 'Positive', data: posData, backgroundColor: '#4ade8077' },
+        { label: 'Negative', data: negData, backgroundColor: '#f8717177' },
+      ]
+    },
+    options: { ...baseOpts, indexAxis: 'y' }
+  });
+
+  // Feature count per app
+  const appLabels = Object.keys(latest);
+  const countPerApp = appLabels.map(app => {
+    const feats = latest[app]?.features || {};
+    return Array.isArray(feats) ? feats.length : Object.keys(feats).length;
+  });
+
+  makeChart('chart-feature-count', {
+    type: 'doughnut',
+    data: {
+      labels: appLabels,
+      datasets: [{ data: countPerApp, backgroundColor: COLORS.slice(0, appLabels.length) }]
+    },
+    options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { labels: { color: '#8892b0' } } } }
+  });
+
+  // Top requested
+  const reqEl = document.getElementById('top-requested');
+  reqEl.innerHTML = '';
+  for (const [appName, data] of Object.entries(latest)) {
+    if (data.top_requested?.length) {
+      reqEl.innerHTML += `<div style="font-size:.8rem;color:var(--muted);margin:8px 0 4px;font-weight:600">${appName}</div>`;
+      data.top_requested.slice(0, 5).forEach(r => {
+        reqEl.innerHTML += `<div class="info-chip">💡 ${r}</div>`;
+      });
+    }
+  }
+}
+
+// --- TAB 3: Trends ---
+function renderTrendsTab() {
+  const { historical } = _state;
+  let allDates = new Set();
+  Object.values(historical).forEach(dm => Object.keys(dm).forEach(d => allDates.add(d)));
+  const dates = Array.from(allDates).sort();
+
+  // All-apps positive trend
+  const datasets = Object.entries(historical).map(([appName, dm], i) => ({
+    label: appName,
+    data: dates.map(d => dm[d]?.sentiment?.positive ?? null),
+    borderColor: COLORS[i % COLORS.length],
+    backgroundColor: COLORS[i % COLORS.length] + '22',
+    fill: false, tension: 0.3, spanGaps: true, pointRadius: 3,
+  }));
+
+  makeChart('chart-all-trends', {
+    type: 'line',
+    data: { labels: dates.map(d => d.slice(5)), datasets },
+    options: { ...baseOpts }
+  });
+
+  // Rating trend
+  const ratingDatasets = Object.entries(historical).map(([appName, dm], i) => ({
+    label: appName,
+    data: dates.map(d => dm[d]?.average_rating ?? null),
+    borderColor: COLORS[i % COLORS.length], tension: 0.3, spanGaps: true, pointRadius: 3,
+  }));
+
+  makeChart('chart-rating-trend', {
+    type: 'line',
+    data: { labels: dates.map(d => d.slice(5)), datasets: ratingDatasets },
+    options: { ...baseOpts, scales: { ...baseOpts.scales, y: { ...baseOpts.scales?.y, min: 1, max: 5 } } }
+  });
+
+  // Review volume
+  const volDatasets = Object.entries(historical).map(([appName, dm], i) => ({
+    label: appName,
+    data: dates.map(d => dm[d]?.review_count ?? null),
+    backgroundColor: COLORS[i % COLORS.length] + '88',
+    spanGaps: true,
+  }));
+
+  makeChart('chart-review-volume', {
+    type: 'bar',
+    data: { labels: dates.map(d => d.slice(5)), datasets: volDatasets },
+    options: { ...baseOpts }
+  });
+
+  // Insight placeholder — could be loaded from API
+  document.getElementById('trend-insight').textContent =
+    dates.length === 0
+      ? 'No historical data yet. Run the agent to collect data.'
+      : `Showing ${dates.length} days of data across ${Object.keys(historical).length} apps. Positive sentiment lines trending up indicate improving user satisfaction. Watch for spikes in negative sentiment as early warning signals.`;
+}
+
+// --- TAB 4: Competitive ---
+function renderCompetitiveTab() {
+  const { latest } = _state;
+
+  // Build simple scores
+  const appScores = Object.entries(latest).map(([appName, data]) => {
+    const sent = data.sentiment || {};
+    const pos = sent.positive || 0, neg = sent.negative || 0;
+    const rating = data.average_rating || 3;
+    const score = Math.round((pos / 100) * 40 - (neg / 100) * 20 + ((rating - 1) / 4) * 30 + 10);
+    return { appName, score: Math.max(0, Math.min(100, score)), sent, rating, data };
+  }).sort((a, b) => b.score - a.score);
+
+  // Table
+  const tbody = document.querySelector('#competitive-table tbody');
+  tbody.innerHTML = '';
+  appScores.forEach(({ appName, score, sent, rating }) => {
+    const badgeClass = score >= 70 ? 'score-high' : score >= 40 ? 'score-mid' : 'score-low';
+    tbody.innerHTML += `
+      <tr>
+        <td><strong>${appName}</strong></td>
+        <td><span class="score-badge ${badgeClass}">${score}/100</span></td>
+        <td><span style="color:var(--green)">${(sent.positive||0).toFixed(0)}%+</span> / <span style="color:var(--red)">${(sent.negative||0).toFixed(0)}%-</span></td>
+        <td>${rating ? rating.toFixed(1) + ' ⭐' : '—'}</td>
+        <td><span class="trend-flat">→ stable</span></td>
+      </tr>`;
+  });
+
+  // Radar chart
+  const radarLabels = ['Sentiment', 'Rating', 'Feature Coverage', 'Review Volume', 'Stability'];
+  const radarDatasets = appScores.map(({ appName, sent, data }, i) => {
+    const rating = data.average_rating || 3;
+    const feats = Object.keys(data.features || {}).length;
+    const vol = Math.min((data.review_count || 0) / 5, 20);
+    return {
+      label: appName,
+      data: [
+        (sent.positive || 0) / 100 * 20,
+        ((rating - 1) / 4) * 20,
+        Math.min(feats * 1.5, 20),
+        vol,
+        Math.max(0, 20 - (sent.negative || 0) / 5)
+      ],
+      borderColor: COLORS[i % COLORS.length],
+      backgroundColor: COLORS[i % COLORS.length] + '22',
+      pointBackgroundColor: COLORS[i % COLORS.length],
+    };
+  });
+
+  if (chartInstances['chart-radar']) chartInstances['chart-radar'].destroy();
+  const radarCtx = document.getElementById('chart-radar');
+  if (radarCtx) {
+    chartInstances['chart-radar'] = new Chart(radarCtx, {
+      type: 'radar',
+      data: { labels: radarLabels, datasets: radarDatasets },
+      options: {
+        responsive: true, maintainAspectRatio: false,
+        scales: { r: { ticks: { display: false }, grid: { color: '#2e3350' }, pointLabels: { color: '#8892b0', font: { size: 11 } }, angleLines: { color: '#2e3350' } } },
+        plugins: { legend: { labels: { color: '#8892b0' } } }
+      }
+    });
+  }
+
+  // Recommendations
+  const recEl = document.getElementById('recommendations');
+  if (appScores.length > 0) {
+    const loser = appScores[appScores.length - 1];
+    const winner = appScores[0];
+    recEl.innerHTML = `
+      <div class="insight-box">🥇 ${winner.appName} leads with a score of ${winner.score}/100 driven by ${(winner.sent.positive||0).toFixed(0)}% positive sentiment.\n\n${loser.appName !== winner.appName ? `📉 ${loser.appName} trails at ${loser.score}/100 — focus on reducing negative sentiment (${(loser.sent.negative||0).toFixed(0)}%) and shipping requested features.\n\n` : ''}💡 Apps with lower ratings should prioritize performance and stability fixes — these drive the most 1-star reviews.\n\n📊 Monitor weekly sentiment shifts as early indicators of product quality changes.</div>`;
+  }
+}
+
+// --- TAB 5: Raw Data ---
+function renderRawTab() {
+  const { historical, apps } = _state;
+
+  // Populate filter dropdown
+  const sel = document.getElementById('filter-app');
+  sel.innerHTML = '<option value="">All Apps</option>';
+  apps.forEach(a => { sel.innerHTML += `<option value="${a}">${a}</option>`; });
+
+  populateRawTable(historical, '', '', '');
+}
+
+function populateRawTable(historical, filterApp, filterFrom, filterTo) {
+  const tbody = document.getElementById('raw-body');
+  tbody.innerHTML = '';
+  let rows = [];
+
+  Object.entries(historical).forEach(([appName, dateMap]) => {
+    if (filterApp && appName !== filterApp) return;
+    Object.entries(dateMap).forEach(([date, day]) => {
+      if (filterFrom && date < filterFrom) return;
+      if (filterTo && date > filterTo) return;
+      const sent = day.sentiment || {};
+      rows.push({ appName, date, sent, day });
+    });
+  });
+
+  rows.sort((a, b) => b.date.localeCompare(a.date));
+
+  rows.forEach(({ appName, date, sent, day }) => {
+    tbody.innerHTML += `
+      <tr>
+        <td>${appName}</td>
+        <td>${date}</td>
+        <td style="color:var(--green)">${(sent.positive||0).toFixed(1)}%</td>
+        <td style="color:var(--red)">${(sent.negative||0).toFixed(1)}%</td>
+        <td style="color:var(--yellow)">${(sent.neutral||0).toFixed(1)}%</td>
+        <td>${day.average_rating ? day.average_rating.toFixed(1) : '—'}</td>
+        <td>${day.review_count || '—'}</td>
+      </tr>`;
+  });
+
+  if (!rows.length) {
+    tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;color:var(--muted);padding:40px">No data. Run the agent first.</td></tr>';
+  }
+}
+
+function applyFilter() {
+  const app = document.getElementById('filter-app').value;
+  const from = document.getElementById('filter-from').value;
+  const to = document.getElementById('filter-to').value;
+  populateRawTable(_state.historical, app, from, to);
+}
+
+// Auto-refresh every 60 seconds
+setInterval(loadAll, 60_000);
+loadAll();
+</script>
+</body>
+</html>
