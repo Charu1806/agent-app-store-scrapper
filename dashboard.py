@@ -103,8 +103,10 @@ def create_app() -> Flask:
     return app
 
 
+# Module-level app instance for gunicorn (Procfile: gunicorn dashboard:app)
+app = create_app()
+
 if __name__ == "__main__":
     port = int(os.getenv("DASHBOARD_PORT", "5000"))
     print(f"🌐 Dashboard running at http://localhost:{port}")
-    app = create_app()
     app.run(host="0.0.0.0", port=port, debug=True)
